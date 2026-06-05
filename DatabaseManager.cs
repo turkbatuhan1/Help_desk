@@ -1,4 +1,5 @@
-﻿using Microsoft.Data.SqlClient;
+using Microsoft.Data.SqlClient;
+using System.Configuration;
 using System.Data;
 
 namespace DXApplication6
@@ -11,27 +12,31 @@ namespace DXApplication6
 
     public class DatabaseManager
     {
-        // Bağlantı adresi sabit tutulur
-        private readonly string _connectionString = @"Data Source=.\SQLEXPRESS;Initial Catalog=HelpDeskDB;Integrated Security=True;Encrypt=True;TrustServerCertificate=True";
+        public static DatabaseManager Instance { get; } = new DatabaseManager();
 
-        // SQL bağlantı nesnesini döner
+        private readonly string _connectionString;
+
+        private DatabaseManager()
+        {
+            _connectionString = ConfigurationManager.ConnectionStrings["HelpDeskDb"]?.ConnectionString
+                ?? throw new InvalidOperationException("HelpDeskDb connection string App.config içinde bulunamadı.");
+        }
+
         public SqlConnection GetConnection()
         {
             return new SqlConnection(_connectionString);
         }
 
-        // Giriş Kontrolü
         public LoginResult? Login(string username, string password)
         {
             using (SqlConnection connection = GetConnection())
             {
                 connection.Open();
-                string query = "SELECT KullaniciID, Rol FROM Kullanicilar WHERE KullaniciAdi=@p1 AND Sifre=@p2";
+                string query = "SELECT KullaniciID, Rol, Sifre FROM Kullanicilar WHERE KullaniciAdi = @username";
 
                 using (SqlCommand command = new SqlCommand(query, connection))
                 {
-                    command.Parameters.AddWithValue("@p1", username);
-                    command.Parameters.AddWithValue("@p2", password);
+                    command.Parameters.AddWithValue("@username", username);
 
                     using SqlDataReader reader = command.ExecuteReader();
                     if (!reader.Read())
@@ -39,16 +44,43 @@ namespace DXApplication6
                         return null;
                     }
 
+                    int userId = reader.GetInt32(0);
+                    string role = reader.GetString(1);
+                    string storedPassword = reader.GetString(2);
+                    bool isValidPassword = PasswordHasher.IsHash(storedPassword)
+                        ? PasswordHasher.Verify(password, storedPassword)
+                        : string.Equals(password, storedPassword, StringComparison.Ordinal);
+
+                    if (!isValidPassword)
+                    {
+                        return null;
+                    }
+
+                    if (!PasswordHasher.IsHash(storedPassword))
+                    {
+                        reader.Close();
+                        UpdateUserPasswordHash(connection, userId, PasswordHasher.Hash(password));
+                    }
+
                     return new LoginResult
                     {
-                        UserId = reader.GetInt32(0),
-                        Role = reader.GetString(1)
+                        UserId = userId,
+                        Role = role
                     };
                 }
             }
         }
 
-        // Yeni Talep Oluşturma
+        private static void UpdateUserPasswordHash(SqlConnection connection, int userId, string passwordHash)
+        {
+            string query = "UPDATE Kullanicilar SET Sifre = @passwordHash WHERE KullaniciID = @userId";
+
+            using SqlCommand command = new SqlCommand(query, connection);
+            command.Parameters.AddWithValue("@passwordHash", passwordHash);
+            command.Parameters.AddWithValue("@userId", userId);
+            command.ExecuteNonQuery();
+        }
+
         public bool CreateTicket(int userId, string title, string description)
         {
             try
@@ -71,15 +103,12 @@ namespace DXApplication6
             }
             catch (Exception ex)
             {
-                // Hata durumunda konsola yazdırabiliriz (Geliştirme aşaması için)
                 Console.WriteLine("Database Error: " + ex.Message);
                 return false;
             }
         }
-    
 
-    // Tüm talepleri bir liste (DataTable) olarak döner.
-public DataTable GetAllTickets()
+        public DataTable GetAllTickets()
         {
             DataTable dt = new DataTable();
             try
@@ -87,11 +116,10 @@ public DataTable GetAllTickets()
                 using (SqlConnection connection = GetConnection())
                 {
                     connection.Open();
-                    // Talepleri ve gönderen kişilerin isimlerini birleştirerek getiriyoruz (JOIN)
-                    string query = @"SELECT T.TalepID, K.KullaniciAdi, T.Baslik, T.Durum, T.OlusturmaTarihi 
-                             FROM Talepler T 
-                             JOIN Kullanicilar K ON T.GonderenID = K.KullaniciID 
-                             ORDER BY T.OlusturmaTarihi DESC";
+                    string query = @"SELECT T.TalepID, K.KullaniciAdi, T.Baslik, T.Durum, T.OlusturmaTarihi
+                                     FROM Talepler T
+                                     JOIN Kullanicilar K ON T.GonderenID = K.KullaniciID
+                                     ORDER BY T.OlusturmaTarihi DESC";
 
                     using (SqlDataAdapter adapter = new SqlDataAdapter(query, connection))
                     {
@@ -102,6 +130,33 @@ public DataTable GetAllTickets()
             catch (Exception ex)
             {
                 Console.WriteLine("Error fetching tickets: " + ex.Message);
+            }
+            return dt;
+        }
+
+        public DataTable GetTicketsByUser(int userId)
+        {
+            DataTable dt = new DataTable();
+            try
+            {
+                using (SqlConnection connection = GetConnection())
+                {
+                    connection.Open();
+                    string query = @"SELECT TalepID, Baslik, MesajText, Durum, OlusturmaTarihi
+                                     FROM Talepler
+                                     WHERE GonderenID = @userId
+                                     ORDER BY OlusturmaTarihi DESC";
+
+                    using (SqlDataAdapter adapter = new SqlDataAdapter(query, connection))
+                    {
+                        adapter.SelectCommand.Parameters.AddWithValue("@userId", userId);
+                        adapter.Fill(dt);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Error fetching user tickets: " + ex.Message);
             }
             return dt;
         }

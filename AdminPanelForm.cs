@@ -11,6 +11,7 @@ namespace HelpDesk_Desktop
 {
     public class AdminPanelForm : XtraForm
     {
+        private readonly DatabaseManager _database = DatabaseManager.Instance;
         private GridControl gridTickets = null!;
         private GridView gridViewTickets = null!;
         private ComboBoxEdit cmbStatus = null!;
@@ -34,7 +35,7 @@ namespace HelpDesk_Desktop
 
             LabelControl lblTitle = new LabelControl
             {
-                Text = "Ariza Talepleri",
+                Text = "Arıza Talepleri",
                 Location = new Point(24, 22),
                 Parent = this,
                 Font = new Font("Tahoma", 14, FontStyle.Bold)
@@ -42,7 +43,7 @@ namespace HelpDesk_Desktop
 
             btnRefresh = new SimpleButton
             {
-                Text = "YENILE",
+                Text = "YENİLE",
                 Location = new Point(830, 20),
                 Size = new Size(110, 34),
                 Anchor = AnchorStyles.Top | AnchorStyles.Right,
@@ -68,7 +69,7 @@ namespace HelpDesk_Desktop
 
             LabelControl lblStatus = new LabelControl
             {
-                Text = "Secili Talep Durumu",
+                Text = "Seçili Talep Durumu",
                 Location = new Point(24, 490),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
                 Parent = this,
@@ -82,12 +83,12 @@ namespace HelpDesk_Desktop
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
                 Parent = this
             };
-            cmbStatus.Properties.Items.AddRange(new[] { "Yeni", "Inceleniyor", "Cozuldu", "Kapatildi" });
+            cmbStatus.Properties.Items.AddRange(new[] { "Yeni", "İnceleniyor", "Çözüldü", "Kapatıldı" });
             cmbStatus.Properties.TextEditStyle = DevExpress.XtraEditors.Controls.TextEditStyles.DisableTextEditor;
 
             btnUpdateStatus = new SimpleButton
             {
-                Text = "DURUMU GUNCELLE",
+                Text = "DURUMU GÜNCELLE",
                 Location = new Point(260, 514),
                 Size = new Size(170, 36),
                 Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
@@ -116,8 +117,7 @@ namespace HelpDesk_Desktop
         {
             try
             {
-                DatabaseManager db = new DatabaseManager();
-                DataTable tickets = db.GetAllTickets();
+                DataTable tickets = _database.GetAllTickets();
                 gridTickets.DataSource = tickets;
 
                 ConfigureColumns();
@@ -126,7 +126,7 @@ namespace HelpDesk_Desktop
             }
             catch (Exception ex)
             {
-                lblInfo.Text = "Talepler yuklenemedi.";
+                lblInfo.Text = "Talepler yüklenemedi.";
                 XtraMessageBox.Show($"Database connection failed:\n{ex.Message}", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
@@ -143,12 +143,12 @@ namespace HelpDesk_Desktop
 
             if (gridViewTickets.Columns["KullaniciAdi"] != null)
             {
-                gridViewTickets.Columns["KullaniciAdi"].Caption = "Kullanici";
+                gridViewTickets.Columns["KullaniciAdi"].Caption = "Kullanıcı";
             }
 
             if (gridViewTickets.Columns["Baslik"] != null)
             {
-                gridViewTickets.Columns["Baslik"].Caption = "Baslik";
+                gridViewTickets.Columns["Baslik"].Caption = "Başlık";
             }
 
             if (gridViewTickets.Columns["Durum"] != null)
@@ -158,7 +158,7 @@ namespace HelpDesk_Desktop
 
             if (gridViewTickets.Columns["OlusturmaTarihi"] != null)
             {
-                gridViewTickets.Columns["OlusturmaTarihi"].Caption = "Olusturma Tarihi";
+                gridViewTickets.Columns["OlusturmaTarihi"].Caption = "Oluşturma Tarihi";
                 gridViewTickets.Columns["OlusturmaTarihi"].DisplayFormat.FormatType = DevExpress.Utils.FormatType.DateTime;
                 gridViewTickets.Columns["OlusturmaTarihi"].DisplayFormat.FormatString = "dd.MM.yyyy HH:mm";
             }
@@ -175,36 +175,35 @@ namespace HelpDesk_Desktop
             object idValue = gridViewTickets.GetFocusedRowCellValue("TalepID");
             if (idValue == null || idValue == DBNull.Value)
             {
-                XtraMessageBox.Show("Lutfen bir talep secin.", "Secim Yok", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                XtraMessageBox.Show("Lütfen bir talep seçin.", "Seçim Yok", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             string? newStatus = cmbStatus.EditValue?.ToString();
             if (string.IsNullOrWhiteSpace(newStatus))
             {
-                XtraMessageBox.Show("Lutfen bir durum secin.", "Eksik Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                XtraMessageBox.Show("Lütfen bir durum seçin.", "Eksik Bilgi", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             try
             {
-                DatabaseManager db = new DatabaseManager();
-                bool updated = db.UpdateTicketStatus(Convert.ToInt32(idValue), newStatus);
+                bool updated = _database.UpdateTicketStatus(Convert.ToInt32(idValue), newStatus);
 
                 if (updated)
                 {
-                    lblInfo.Text = "Talep durumu guncellendi.";
+                    lblInfo.Text = "Talep durumu güncellendi.";
                     LoadTickets();
                 }
                 else
                 {
-                    lblInfo.Text = "Talep durumu guncellenemedi.";
-                    XtraMessageBox.Show("Talep durumu guncellenemedi.", "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    lblInfo.Text = "Talep durumu güncellenemedi.";
+                    XtraMessageBox.Show("Talep durumu güncellenemedi.", "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
             }
             catch (Exception ex)
             {
-                lblInfo.Text = "Guncelleme hatasi.";
+                lblInfo.Text = "Güncelleme hatası.";
                 XtraMessageBox.Show($"Database connection failed:\n{ex.Message}", "Connection Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }

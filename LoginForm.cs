@@ -14,6 +14,7 @@ namespace HelpDesk_Desktop
         private SimpleButton btnLogin = null!;
         private LabelControl lblUser = null!;
         private LabelControl lblPass = null!;
+        private readonly AuthService _authService = new();
 
         public LoginForm()
         {
@@ -98,12 +99,16 @@ namespace HelpDesk_Desktop
                 return;
             }
 
-            DatabaseManager db = new DatabaseManager();
             LoginResult? loginResult;
 
             try
             {
-                loginResult = db.Login(txtUsername.Text.Trim(), txtPassword.Text);
+                loginResult = _authService.Login(txtUsername.Text, txtPassword.Text, out string? loginError);
+                if (loginResult == null)
+                {
+                    XtraMessageBox.Show(loginError, "Access Denied", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
             }
             catch (Exception ex)
             {
@@ -115,29 +120,21 @@ namespace HelpDesk_Desktop
                 return;
             }
 
-            if (loginResult != null)
-            {
-                XtraMessageBox.Show($"Access Granted! Role: {loginResult.Role}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            XtraMessageBox.Show($"Access Granted! Role: {loginResult.Role}", "Success", MessageBoxButtons.OK, MessageBoxIcon.Information);
 
-                // Başarılı girişte yapılacak yönlendirme buraya gelecek
-                if (loginResult.Role == "Admin")
-                {
-                    AdminPanelForm adminPanel = new AdminPanelForm();
-                    adminPanel.FormClosed += (_, _) => Show();
-                    Hide();
-                    adminPanel.Show();
-                }
-                else
-                {
-                    UserTicketForm ticketForm = new UserTicketForm(loginResult.UserId);
-                    ticketForm.FormClosed += (_, _) => Show();
-                    Hide();
-                    ticketForm.Show();
-                }
+            if (loginResult.Role == "Admin")
+            {
+                AdminPanelForm adminPanel = new AdminPanelForm();
+                adminPanel.FormClosed += (_, _) => Show();
+                Hide();
+                adminPanel.Show();
             }
             else
             {
-                XtraMessageBox.Show("Invalid username or password!", "Access Denied", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                UserTicketForm ticketForm = new UserTicketForm(loginResult.UserId);
+                ticketForm.FormClosed += (_, _) => Show();
+                Hide();
+                ticketForm.Show();
             }
         }
     }
